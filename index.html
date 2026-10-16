@@ -1,0 +1,338 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#f3f2ef">
+<style>
+:root{color-scheme:light;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+[hidden]{display:none!important}
+</style>
+<title>Tabata Timer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Figtree:wght@400;500;600&display=swap">
+<style>
+/* Layout: one column, the timer face fills with the phase color so it reads from across the room; settings sit below */
+:root{
+  --bg:#f3f2ef; --surface:#ffffff; --fg:#1d1c1a; --muted:#6f6b64; --line:#dedad3;
+  --work:#e2471d; --work-ink:#fff7f2; --rest:#1f7a72; --rest-ink:#effaf8;
+  --prep:#c9962a; --prep-ink:#1d1c1a; --idle:#e9e6e0; --idle-ink:#1d1c1a;
+  --display:"Big Shoulders Display","Arial Narrow",Impact,sans-serif;
+  --body:"Figtree",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#161514; --surface:#201f1d; --fg:#f0ede8; --muted:#a39e95; --line:#34322e;
+  --work:#e8532a; --work-ink:#fff7f2; --rest:#2a8f86; --rest-ink:#effaf8;
+  --prep:#d3a43a; --prep-ink:#1d1c1a; --idle:#262422; --idle-ink:#f0ede8; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#161514; --surface:#201f1d; --fg:#f0ede8; --muted:#a39e95; --line:#34322e;
+  --work:#e8532a; --work-ink:#fff7f2; --rest:#2a8f86; --rest-ink:#effaf8;
+  --prep:#d3a43a; --prep-ink:#1d1c1a; --idle:#262422; --idle-ink:#f0ede8; color-scheme:dark}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--body);font-size:15px;line-height:1.45;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 40px}
+.wrap{max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+
+/* Timer face */
+.face{--c:var(--idle);--ink:var(--idle-ink);background:var(--c);color:var(--ink);border-radius:20px;
+  padding:22px 22px 20px;display:flex;flex-direction:column;gap:14px;transition:background .35s ease,color .35s ease}
+.face[data-phase="work"]{--c:var(--work);--ink:var(--work-ink)}
+.face[data-phase="rest"]{--c:var(--rest);--ink:var(--rest-ink)}
+.face[data-phase="prep"]{--c:var(--prep);--ink:var(--prep-ink)}
+/* Dial: one ring for the whole workout; work and rest arcs drawn to scale */
+.dial{position:relative;width:min(100%,360px);aspect-ratio:1;max-width:100%;margin:0 auto}
+.dial svg{position:absolute;inset:0;width:100%;height:100%;overflow:visible}
+.dial circle{fill:none;stroke:currentColor}
+.dial .bg{opacity:.2}
+.dial .rs{opacity:.6}
+.dial .bg.rs{opacity:.12}
+.center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;text-align:center;font-variant-numeric:tabular-nums}
+.label{font-family:var(--display);font-weight:800;font-size:clamp(1.1rem,5vw,1.45rem);letter-spacing:.08em;text-transform:uppercase}
+.round{font-weight:600;font-size:.95rem;opacity:.85}
+.digits{font-family:var(--display);font-weight:800;font-size:clamp(4.8rem,24vw,8.6rem);line-height:.86;letter-spacing:-.01em}
+.face[data-state="paused"] .digits{animation:blink 1.2s steps(2,start) infinite}
+@keyframes blink{to{opacity:.35}}
+.sub{display:flex;justify-content:space-between;font-size:.9rem;opacity:.85;font-variant-numeric:tabular-nums;gap:12px}
+
+/* Controls */
+.controls{display:flex;gap:10px;flex-wrap:wrap}
+button{font:inherit;cursor:pointer;border-radius:12px;border:1.5px solid transparent;padding:14px 18px;font-weight:600;font-size:1rem;
+  transition:transform .08s ease,background .2s,border-color .2s}
+button:active{transform:scale(.97)}
+button:focus-visible,input:focus-visible{outline:3px solid var(--work);outline-offset:2px}
+.primary{flex:1 1 200px;background:var(--fg);color:var(--bg)}
+.ghost{flex:1 1 120px;background:transparent;color:var(--fg);border-color:var(--line)}
+.ghost:hover{border-color:var(--muted)}
+button:disabled{opacity:.4;cursor:default}
+
+/* Settings */
+.settings{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px;display:flex;flex-direction:column;gap:14px}
+.settings h2{margin:0;font-size:.78rem;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:600}
+.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+@media (max-width:420px){.grid{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:6px;min-width:0}
+.field label{font-weight:600;font-size:.92rem}
+.field small{color:var(--muted);font-size:.8rem}
+.step{display:flex;align-items:stretch;border:1.5px solid var(--line);border-radius:10px;overflow:hidden;background:var(--bg)}
+.step button{padding:0;width:44px;border-radius:0;background:transparent;color:var(--fg);font-size:1.3rem;font-weight:500}
+.step button:hover:not(:disabled){background:var(--line)}
+.step input{flex:1;min-width:0;width:100%;border:0;background:transparent;color:var(--fg);text-align:center;
+  font-family:var(--display);font-weight:600;font-size:1.6rem;padding:6px 0;font-variant-numeric:tabular-nums;-moz-appearance:textfield}
+.step input::-webkit-inner-spin-button,.step input::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.foot{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:12px;font-size:.9rem;color:var(--muted)}
+.foot strong{color:var(--fg);font-variant-numeric:tabular-nums}
+.link{background:none;border:0;padding:4px 0;color:var(--muted);text-decoration:underline;text-underline-offset:3px;font-weight:500;font-size:.9rem}
+.link:hover{color:var(--fg)}
+fieldset{border:0;margin:0;padding:0;min-width:0}
+fieldset:disabled{opacity:.55}
+.hint{font-size:.8rem;color:var(--muted);text-align:center}
+@media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <section class="face" id="face" data-phase="idle" data-state="idle" aria-live="polite">
+    <div class="dial">
+      <svg viewBox="0 0 300 300" aria-hidden="true"><g id="outer"></g></svg>
+      <div class="center">
+        <span class="label" id="label">Bereit</span>
+        <span class="digits" id="digits">40</span>
+        <span class="round" id="round">Runde – / 8</span>
+      </div>
+    </div>
+    <div class="sub"><span id="next">Als Nächstes: Arbeit 40 s</span><span id="left">Gesamt 7:40</span></div>
+  </section>
+
+  <div class="controls">
+    <button class="primary" id="btnMain" type="button">Start</button>
+    <button class="ghost" id="btnRestart" type="button" disabled>Neu starten</button>
+    <button class="ghost" id="btnStop" type="button" disabled>Abbrechen</button>
+  </div>
+
+  <form class="settings" id="settings" autocomplete="off">
+    <h2>Einstellungen</h2>
+    <fieldset id="fs">
+      <div class="grid">
+        <div class="field">
+          <label for="work">Arbeit</label>
+          <div class="step"><button type="button" data-d="-5" data-f="work" aria-label="Arbeit 5 Sekunden weniger">−</button><input id="work" type="number" inputmode="numeric" min="1" max="3600" value="40"><button type="button" data-d="5" data-f="work" aria-label="Arbeit 5 Sekunden mehr">+</button></div>
+          <small>Sekunden</small>
+        </div>
+        <div class="field">
+          <label for="rest">Pause</label>
+          <div class="step"><button type="button" data-d="-5" data-f="rest" aria-label="Pause 5 Sekunden weniger">−</button><input id="rest" type="number" inputmode="numeric" min="0" max="3600" value="20"><button type="button" data-d="5" data-f="rest" aria-label="Pause 5 Sekunden mehr">+</button></div>
+          <small>Sekunden</small>
+        </div>
+        <div class="field">
+          <label for="rounds">Runden</label>
+          <div class="step"><button type="button" data-d="-1" data-f="rounds" aria-label="Eine Runde weniger">−</button><input id="rounds" type="number" inputmode="numeric" min="1" max="99" value="8"><button type="button" data-d="1" data-f="rounds" aria-label="Eine Runde mehr">+</button></div>
+          <small>Arbeit + Pause</small>
+        </div>
+        <div class="field">
+          <label for="prep">Vorlauf</label>
+          <div class="step"><button type="button" data-d="-5" data-f="prep" aria-label="Vorlauf 5 Sekunden weniger">−</button><input id="prep" type="number" inputmode="numeric" min="0" max="600" value="5"><button type="button" data-d="5" data-f="prep" aria-label="Vorlauf 5 Sekunden mehr">+</button></div>
+          <small>Sekunden bis zur ersten Glocke</small>
+        </div>
+      </div>
+    </fieldset>
+    <div class="foot">
+      <span>Dauer <strong id="total">7:40</strong></span>
+      <span style="display:flex;gap:16px">
+        <button class="link" type="button" id="btnBell">Glocke testen</button>
+        <button class="link" type="button" id="btnDefault">Standard 40/20 × 8</button>
+      </span>
+    </div>
+  </form>
+  <p class="hint">Leertaste: Start / Pause · Esc: Abbrechen</p>
+</div>
+
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const F = { work:$('work'), rest:$('rest'), rounds:$('rounds'), prep:$('prep') };
+  const LIM = { work:[1,3600], rest:[0,3600], rounds:[1,99], prep:[0,600] };
+  const DEF = { work:40, rest:20, rounds:8, prep:5 };
+  const NAMES = { prep:'Vorlauf', work:'Arbeit', rest:'Pause' };
+
+  // ---- settings
+  const clamp = (k,v) => Math.min(LIM[k][1], Math.max(LIM[k][0], Math.round(Number(v)||0)));
+  const cfg = () => ({ work:clamp('work',F.work.value), rest:clamp('rest',F.rest.value), rounds:clamp('rounds',F.rounds.value), prep:clamp('prep',F.prep.value) });
+  try { const s = JSON.parse(localStorage.getItem('tabata-cfg')||'null'); if (s) for (const k in F) if (k in s) F[k].value = clamp(k,s[k]); } catch(e){}
+  const save = () => { try { localStorage.setItem('tabata-cfg', JSON.stringify(cfg())); } catch(e){} };
+
+  const fmt = s => { s = Math.max(0, Math.ceil(s)); const m = Math.floor(s/60); return m + ':' + String(s%60).padStart(2,'0'); };
+
+  // ---- phases: [prep] then work/rest per round, no rest after the last round
+  function build(c){
+    const p = [];
+    if (c.prep > 0) p.push({type:'prep', dur:c.prep, round:0});
+    for (let r=1; r<=c.rounds; r++){
+      p.push({type:'work', dur:c.work, round:r});
+      if (r < c.rounds && c.rest > 0) p.push({type:'rest', dur:c.rest, round:r});
+    }
+    return p;
+  }
+
+  // ---- bell (synthesized, short)
+  let ac = null;
+  function audio(){ if (!ac) { try { ac = new (window.AudioContext||window.webkitAudioContext)(); } catch(e){} } if (ac && ac.state==='suspended') ac.resume(); return ac; }
+  function bell(){
+    const a = audio(); if (!a) return;
+    const t = a.currentTime + 0.01, out = a.createGain();
+    out.gain.value = 0.32; out.connect(a.destination);
+    [[880,1,1.3],[1760*1.19,.45,.7],[880*2.76,.28,.45],[880*5.4,.12,.25]].forEach(([f,amp,dec]) => {
+      const o = a.createOscillator(), g = a.createGain();
+      o.type = 'sine'; o.frequency.value = f;
+      g.gain.setValueAtTime(0, t); g.gain.linearRampToValueAtTime(amp, t+0.004);
+      g.gain.exponentialRampToValueAtTime(0.0001, t+dec);
+      o.connect(g); g.connect(out); o.start(t); o.stop(t+dec+0.05);
+    });
+  }
+
+  // ---- engine
+  let state = 'idle', phases = [], idx = 0, endAt = 0, pausedLeft = 0, timer = null, wake = null;
+
+  function enter(i, startAt){
+    idx = i; const ph = phases[i];
+    endAt = startAt + ph.dur*1000;
+    if (ph.type === 'work') bell();
+  }
+  function step(){
+    if (state !== 'running') return;
+    const now = performance.now();
+    while (now >= endAt){
+      const ph = phases[idx];
+      // end of work rings; if the next work starts at the same moment, its own start bell covers it
+      if (ph.type === 'work' && !(phases[idx+1] && phases[idx+1].type==='work')) bell();
+      if (idx + 1 >= phases.length){ finish(); return; }
+      enter(idx+1, endAt);
+    }
+    render();
+  }
+  function start(){
+    const c = cfg(); save();
+    phases = build(c); state = 'running';
+    audio();
+    enter(0, performance.now());
+    clearInterval(timer); timer = setInterval(step, 50);
+    lock(); render();
+  }
+  function pause(){ if (state!=='running') return; pausedLeft = endAt - performance.now(); state='paused'; clearInterval(timer); render(); }
+  function resume(){ if (state!=='paused') return; audio(); endAt = performance.now() + pausedLeft; state='running'; timer=setInterval(step,50); lock(); render(); }
+  function abort(){ state='idle'; clearInterval(timer); release(); render(); }
+  function finish(){ state='done'; clearInterval(timer); release(); render(); }
+
+  async function lock(){ try { if ('wakeLock' in navigator && !wake) { wake = await navigator.wakeLock.request('screen'); wake.addEventListener('release',()=>{wake=null}); } } catch(e){} }
+  function release(){ try { wake && wake.release(); } catch(e){} wake=null; }
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState==='visible' && state==='running') lock(); });
+
+  // ---- render
+  const face=$('face'), gOut=$('outer'), NS='http://www.w3.org/2000/svg';
+  const OR=140, OW=16;
+  function mk(g,r,w,cls){ const c=document.createElementNS(NS,'circle');
+    c.setAttribute('cx',150); c.setAttribute('cy',150); c.setAttribute('r',r); c.setAttribute('pathLength',100);
+    c.setAttribute('stroke-width',w); c.setAttribute('transform','rotate(-90 150 150)'); c.setAttribute('class',cls); g.appendChild(c); return c; }
+  function arc(el,a0,len){ len=Math.max(0,len); el.setAttribute('stroke-dasharray', len+' 200'); el.setAttribute('stroke-dashoffset', -a0); }
+  const clamp01 = x => Math.min(1, Math.max(0, x));
+
+  // outer ring: every work and rest phase of the workout, to scale
+  let outerKey='', outerSegs=[];
+  function buildOuter(k){
+    const key=[k.work,k.rest,k.rounds].join('/'); if (key===outerKey) return; outerKey=key;
+    gOut.innerHTML=''; outerSegs=[];
+    const segs = build({...k, prep:0});
+    const T = segs.reduce((t,x)=>t+x.dur,0), gap = segs.length>1 ? Math.min(0.8, 30/segs.length) : 0;
+    let t=0;
+    segs.forEach(x => {
+      const a0=t/T*100, len=x.dur/T*100-gap, s0=a0+gap/2, rest=x.type==='rest';
+      arc(mk(gOut,OR,OW,'bg'+(rest?' rs':'')), s0, len);
+      const fg = mk(gOut,OR,OW, rest?'rs':''); arc(fg,s0,0);
+      outerSegs.push({start:t, dur:x.dur, s0, len, fg}); t+=x.dur;
+    });
+  }
+  function fillOuter(el){ outerSegs.forEach(s => arc(s.fg, s.s0, s.len*clamp01((el-s.start)/s.dur))); }
+
+  function render(){
+    const k = cfg();
+    const total = k.prep + k.rounds*k.work + (k.rounds-1)*k.rest;
+    $('total').textContent = fmt(total);
+
+    $('fs').disabled = (state==='running'||state==='paused');
+    $('btnDefault').disabled = $('fs').disabled;
+    $('btnRestart').disabled = state==='idle';
+    $('btnStop').disabled = state==='idle';
+    $('btnMain').textContent = state==='running' ? 'Pause' : state==='paused' ? 'Weiter' : state==='done' ? 'Nochmal' : 'Start';
+    face.dataset.state = state;
+    buildOuter(k);
+
+    if (state==='idle'){
+      fillOuter(-1);
+      face.dataset.phase='idle';
+      $('label').textContent='Bereit';
+      $('round').textContent='Runde – / '+k.rounds;
+      $('digits').textContent = k.prep>0 ? k.prep : k.work;
+      $('next').textContent = k.prep>0 ? 'Zuerst: Vorlauf '+k.prep+' s' : 'Zuerst: Arbeit '+k.work+' s';
+      $('left').textContent = 'Gesamt '+fmt(total);
+      return;
+    }
+    if (state==='done'){
+      fillOuter(1e9);
+      face.dataset.phase='idle';
+      $('label').textContent='Fertig';
+      $('round').textContent=k.rounds+' / '+k.rounds+' Runden';
+      $('digits').textContent='0';
+      $('next').textContent='Gut gemacht.';
+      $('left').textContent='Gesamt '+fmt(total);
+      return;
+    }
+    const ph = phases[idx];
+    const left = Math.max(0, state==='paused' ? pausedLeft/1000 : (endAt - performance.now())/1000);
+    const frac = clamp01(1 - left/ph.dur);
+    face.dataset.phase = ph.type;
+    $('label').textContent = state==='paused' ? NAMES[ph.type]+' · pausiert' : NAMES[ph.type];
+    $('round').textContent = ph.round ? 'Runde '+ph.round+' / '+k.rounds : 'Runde – / '+k.rounds;
+    $('digits').textContent = Math.ceil(left - 1e-6);
+    const nx = phases[idx+1];
+    $('next').textContent = nx ? 'Als Nächstes: '+NAMES[nx.type]+' '+nx.dur+' s' : 'Letzte Runde';
+    let rem = left; for (let j=idx+1;j<phases.length;j++) rem += phases[j].dur;
+    $('left').textContent = 'Noch '+fmt(rem);
+
+    let el = 0; for (let j=0;j<idx;j++) if (phases[j].type!=='prep') el += phases[j].dur;
+    if (ph.type!=='prep') el += ph.dur*frac;
+    fillOuter(el);
+  }
+
+  // ---- inputs
+  document.querySelectorAll('.step button').forEach(b => b.addEventListener('click', () => {
+    const k = b.dataset.f; F[k].value = clamp(k, clamp(k,F[k].value) + Number(b.dataset.d)); save(); render();
+  }));
+  Object.entries(F).forEach(([k,el]) => {
+    el.addEventListener('input', () => { save(); render(); });
+    el.addEventListener('blur', () => { el.value = clamp(k, el.value); save(); render(); });
+  });
+  $('settings').addEventListener('submit', e => e.preventDefault());
+  $('btnDefault').addEventListener('click', () => { for (const k in F) F[k].value = DEF[k]; save(); render(); });
+  $('btnBell').addEventListener('click', bell);
+
+  // ---- controls
+  $('btnMain').addEventListener('click', () => {
+    if (state==='running') pause(); else if (state==='paused') resume(); else start();
+  });
+  $('btnRestart').addEventListener('click', start);
+  $('btnStop').addEventListener('click', abort);
+  document.addEventListener('keydown', e => {
+    if (e.target.tagName==='INPUT') return;
+    if (e.code==='Space'){ e.preventDefault(); $('btnMain').click(); }
+    else if (e.key==='Escape') abort();
+  });
+
+  render();
+})();
+</script>
+
+</body>
+</html>
